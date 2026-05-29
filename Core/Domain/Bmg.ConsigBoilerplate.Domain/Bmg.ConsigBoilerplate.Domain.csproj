@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>annotations</Nullable>
+	</PropertyGroup>
+	<ItemGroup>
+		<Compile Remove="Services\v1\Models\**" />
+		<EmbeddedResource Remove="Services\v1\Models\**" />
+		<None Remove="Services\v1\Models\**" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Bmg.Connection.Manager" Version="10.*" />
+		<PackageReference Include="Bmg.NoSqlConnection.Manager" Version="10.*" />
+		<PackageReference Include="Bmg.Project.Utils" Version="10.*" />
+	</ItemGroup>
+</Project>

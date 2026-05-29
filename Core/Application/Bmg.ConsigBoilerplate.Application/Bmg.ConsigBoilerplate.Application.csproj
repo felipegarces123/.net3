@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Bmg.Logging.Internal" Version="10.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Adapters\Driven\Bmg.ConsigBoilerplate.Database\Bmg.ConsigBoilerplate.Database.csproj" />
+    <ProjectReference Include="..\..\Domain\Bmg.ConsigBoilerplate.Domain\Bmg.ConsigBoilerplate.Domain.csproj" />
+  </ItemGroup>
+</Project>

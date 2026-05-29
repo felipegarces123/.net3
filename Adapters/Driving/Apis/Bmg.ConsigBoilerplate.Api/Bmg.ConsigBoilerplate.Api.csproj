@@ -1,0 +1,56 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>annotations</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn>
+		<InvariantGlobalization>false</InvariantGlobalization>
+		<ServerGarbageCollection>true</ServerGarbageCollection>
+	</PropertyGroup>
+	<PropertyGroup>
+		<Title>Weather Forecast</Title>
+		<Company>Banco Bmg</Company>
+		<Copyright>Copyright © Banco Bmg 2023</Copyright>
+		<Description>WatherForecast System</Description>
+		<RepositoryType>git</RepositoryType>
+		<AssemblyName>wfcst-weather-forecast-api</AssemblyName>
+		<AssemblyVersion>1.0.0.0</AssemblyVersion>
+		<FileVersion>1.0.0.0</FileVersion>
+		<Product>Bmg Weather Forecast API</Product>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Remove="HealthCheck\Dashboard\bmg.css" />
+	</ItemGroup>
+	<ItemGroup>
+		<Content Include="..\..\appsettings.Development.json" Link="appsettings.Development.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+		<Content Include="HealthCheck\Dashboard\bmg.css">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Bmg.Api.Client" Version="10.*" />
+		<PackageReference Include="Bmg.Auth" Version="10.*" />
+		<PackageReference Include="Bmg.Bind.Converter" Version="10.*" />
+		<PackageReference Include="Bmg.Cache.Manager" Version="10.*" />
+		<PackageReference Include="Bmg.Connection.Manager" Version="10.*" />
+		<PackageReference Include="Bmg.Crypto" Version="10.*" />
+		<PackageReference Include="Bmg.Kafka" Version="10.*" />
+		<PackageReference Include="Bmg.Logging.Internal" Version="10.*" />
+		<PackageReference Include="Bmg.NoSqlConnection.Manager" Version="10.*" />
+		<PackageReference Include="Bmg.Project.Utils" Version="10.*" />
+		<PackageReference Include="Fody" Version="6.9.3">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="MethodBoundaryAspect.Fody" Version="2.0.150" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\Core\Application\Bmg.ConsigBoilerplate.Application\Bmg.ConsigBoilerplate.Application.csproj" />
+		<ProjectReference Include="..\..\..\Driven\Bmg.ConsigBoilerplate.Database\Bmg.ConsigBoilerplate.Database.csproj" />
+		<ProjectReference Include="..\..\..\Driven\Integrations\Apis\Bmg.ConsigBoilerplate.FaceTec\Bmg.ConsigBoilerplate.FaceTec.csproj" />
+		<ProjectReference Include="..\..\..\Driven\Integrations\Apis\Bmg\Bmg.ConsigBoilerplate.Metabusca\Bmg.ConsigBoilerplate.Metabusca.csproj" />
+	</ItemGroup>
+</Project>
