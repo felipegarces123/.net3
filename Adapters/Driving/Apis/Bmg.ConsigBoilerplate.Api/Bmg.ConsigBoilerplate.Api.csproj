@@ -12,7 +12,7 @@
 		<Title>Weather Forecast</Title>
 		<Company>Banco Bmg</Company>
 		<Copyright>Copyright © Banco Bmg 2023</Copyright>
-		<Description>WatherForecast System</Description>
+		<Description>Weather Forecast System</Description>
 		<RepositoryType>git</RepositoryType>
 		<AssemblyName>wfcst-weather-forecast-api</AssemblyName>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>

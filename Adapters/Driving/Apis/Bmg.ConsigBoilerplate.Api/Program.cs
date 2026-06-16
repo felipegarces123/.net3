@@ -48,7 +48,7 @@ namespace Bmg.ConsigBoilerplate.Api
                     typeof(Mappings.v1.DtoMappingProfile)
                 );
 
-                builder.Services.AddWatherForecastApiModule();
+                builder.Services.AddConsigBoilerplateApiModule();
                 builder.Services.AddBmgMemoryCacheManager();
 
                 // ──────────────────────────────────────────────────────────────────
@@ -63,11 +63,11 @@ namespace Bmg.ConsigBoilerplate.Api
                         .AddBmgParametersApplication()
                         .AddBmgParametersBrokers();
 
-                    builder.Services.AddWatherForecastDatabaseModule(builder.Configuration);
+                    builder.Services.AddConsigBoilerplateDatabaseModule(builder.Configuration);
                     // TODO: Descomente e remova a linha acima caso utilize banco NoSql
-                    //builder.Services.AddWatherForecastNoSqlDatabaseModule(builder.Configuration);
+                    //builder.Services.AddConsigBoilerplateNoSqlDatabaseModule(builder.Configuration);
 
-                    builder.Services.AddWatherForecastApplicationModule();
+                    builder.Services.AddConsigBoilerplateApplicationModule();
 
                     builder.Services.AddBmgAuth(ApplicationPrefix, ApplicationName, builder.Configuration);
 

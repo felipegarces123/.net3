@@ -11,7 +11,7 @@ namespace Bmg.ConsigBoilerplate.Database
     [ExcludeFromCodeCoverage]
     public static class ConsigBoilerplateNoSqlDatabaseDependency
     {
-        public static void AddWatherForecastNoSqlDatabaseModule(this IServiceCollection services, IConfiguration configuration)
+        public static void AddConsigBoilerplateNoSqlDatabaseModule(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddScoped<UnitOfWork.Interfaces.v1.IUnitOfWorkOracle, UnitOfWork.v1.UnitOfWorkOracle>();
 

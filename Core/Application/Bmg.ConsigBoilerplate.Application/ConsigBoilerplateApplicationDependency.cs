@@ -8,7 +8,7 @@ namespace Bmg.ConsigBoilerplate.Application
     [ExcludeFromCodeCoverage]
     public static class ConsigBoilerplateApplicationDependency
     {
-        public static void AddWatherForecastApplicationModule(this IServiceCollection services)
+        public static void AddConsigBoilerplateApplicationModule(this IServiceCollection services)
         {
             services.AddScoped<Domain.Services.v1.IConsigBoilerplateService, Services.v1.ConsigBoilerplateService>();
         }

@@ -30,6 +30,22 @@ Este é um **template de API REST corporativa** construído com **.NET 10 + ASP.
 
 ---
 
+## Tokens de substituição (renomear ao gerar um serviço novo)
+
+> Este template usa **`ConsigBoilerplate`** como nome de exemplo e **`weather-forecast-api`** / **`wfcst`** como aplicação de amostra. Ao gerar um serviço real, **substitua todos os tokens abaixo de forma consistente** — solution, projetos, namespaces, classes, métodos de DI e metadados do `.csproj`.
+
+| Token no template | Substituir por | Exemplo |
+|---|---|---|
+| `ConsigBoilerplate` (solution, namespaces `Bmg.ConsigBoilerplate.*`, classes, métodos de DI) | `{NomeDaAplicacao}` em PascalCase | `AcelConsig` |
+| `Bmg.ConsigBoilerplate.*` | `Bmg.{NomeDaAplicacao}.*` | `Bmg.AcelConsig.Api` |
+| `Add{ConsigBoilerplate}{Camada}Module()` | `Add{NomeDaAplicacao}{Camada}Module()` | `AddAcelConsigApiModule()` |
+| `wfcst` (sigla) / `weather-forecast-api` (nome físico) | sigla / nome físico kebab-case do serviço | `cgp` / `acel-consig-api` |
+| `Weather` / `WeatherModel` (entidade/model de amostra) | entidades reais do domínio | `Usuario` / `UsuarioModel` |
+
+> ⛔ **NUNCA** deixe `ConsigBoilerplate`, `Weather`, `wfcst`, `weather-forecast-api` ou o typo `Wather` em qualquer identificador, namespace, nome de arquivo ou metadado do código gerado. O nome dos **métodos de DI deve casar com o token da aplicação** (não pode haver `AddConsigBoilerplateApiModule` num serviço chamado `AcelConsig`).
+
+---
+
 ## Project Structure
 
 ```text
@@ -167,6 +183,18 @@ Adapters/Driven   →  Database (Dapper/UnitOfWork), Integrations (Bmg.Api.Clien
 | `Database` (Driven) | `Domain` (interfaces/models) | `Application`, `Api` |
 | `Integrations` (Driven) | `Domain` (interfaces) | `Application`, `Api` |
 | `Api` (Driving) | `Domain` (interfaces), `Application` | `Database` / `Integrations` direto |
+
+### ⛔ Separação interface × implementação (BLOQUEIA A PIPELINE BMG)
+
+A pipeline de publicação do BMG **rejeita** uma interface e sua classe concreta no mesmo arquivo. Cada arquivo deve conter **um único tipo público**, e interface e implementação vão em **pastas/namespaces distintos**:
+
+| Componente | Interface (arquivo/namespace) | Implementação (arquivo/namespace) |
+|---|---|---|
+| AppService | `Api/AppServices/v{n}/Interfaces/I{Nome}AppService.cs` | `Api/AppServices/v{n}/{Nome}AppService.cs` |
+| Repository | `Database/Repositories/Interfaces/v{n}/I{Nome}Repository.cs` | `Database/Repositories/v{n}/{Nome}Repository.cs` |
+| Service (port) | `Domain/Services/v{n}/I{Nome}Service.cs` | `Application/Services/v{n}/{Nome}Service.cs` |
+
+> Nunca gere `public interface I...` e `public class ...` no mesmo arquivo, nem coloque a interface do AppService/Repository na mesma pasta da implementação.
 
 ---
 
@@ -352,6 +380,7 @@ namespace Bmg.ConsigBoilerplate.Database.Repositories.v1
 - `SqlBuilder` + `/**where**/` para montar SQL parametrizado (evita SQL injection).
 - `Connection` e os métodos base (`QueryAsync`, `QueryFirstOrDefaultAsync`, `UpdateAsync`, `DeleteAsync`, `SelectPaginationAsync`) vêm de `Bmg.Connection.Manager`.
 - O `UnitOfWorkOracle` agrega os repositórios e é injetado na `Application`.
+- **Tipo de retorno**: o repositório e seus métodos retornam a **Entity** (`Weather`, `Usuario`) — **nunca** o `*Model`. A conversão Entity → Model acontece no Application Service via `Mapper.Map<{Nome}Model>(entity)`. (Exceção: quando Model e Entity são idênticos, aplica-se a regra anti-duplicidade e o próprio Model é usado como `TEntity`.)
 
 ### 3b. Integração externa (`Bmg.Api.Client`)
 
@@ -481,6 +510,36 @@ public class WeatherRequestValidator : AbstractValidator<WeatherRequest>
 
 ---
 
+## AutoMapper — dois profiles, sem cruzar camadas
+
+São **dois** profiles, cada um restrito à sua fronteira. Nunca cruze as camadas (o profile da Application **não** referencia `*.Api.Dtos.*`):
+
+| Profile | Local | Mapeia | Referencia |
+|---|---|---|---|
+| `ModelMappingProfile` | `Application/Mappings/v1/` | **Model ↔ Entity** (Domain ↔ Database) | `*.Domain.Models.v1`, `*.Database.Entities.v1` |
+| `DtoMappingProfile` | `Api/Mappings/v1/` | **DTO ↔ Model** (Api ↔ Domain) | `*.Api.Dtos.v1.*`, `*.Domain.Models.v1` |
+
+**Conjunto padrão por entidade** — use exatamente estas linhas (com `ReverseMap()`); não adicione `.ForMember(...)` redundante quando os nomes coincidem:
+
+```csharp
+// Application/Mappings/v1/ModelMappingProfile.cs
+CreateMap<{Nome}Model, {Entidade}>().ReverseMap();
+CreateMap<PaginatedData<{Nome}Model>, PaginatedData<{Entidade}>>().ReverseMap();
+CreateMap<Operation<{Nome}Model>, Operation<{Entidade}>>().ReverseMap();
+CreateMap<JsonPatchDocument<{Nome}Model>, JsonPatchDocument<{Entidade}>>().ReverseMap();
+
+// Api/Mappings/v1/DtoMappingProfile.cs
+CreateMap<{Nome}Request, {Nome}Model>().ReverseMap();
+CreateMap<{Nome}Model, {Nome}Response>().ReverseMap();
+CreateMap<PaginatedData<{Nome}Model>, PaginatedData<{Nome}Response>>().ReverseMap();
+CreateMap<Operation<{Nome}Request>, Operation<{Nome}Model>>().ReverseMap();
+CreateMap<JsonPatchDocument<{Nome}Request>, JsonPatchDocument<{Nome}Model>>().ReverseMap();
+```
+
+> **Anti-duplicidade (Sonar)**: quando `Model` e `Entity` são idênticos, **não** crie a `Entity` separada nem o `Model↔Entity` map — use o Model como `TEntity` do `GenericRepository` (ver "Boas práticas"). Ou seja: **ou** existe `Entity` + os 4 maps de `ModelMappingProfile`, **ou** Model-como-Entity sem esses maps — nunca os dois ao mesmo tempo.
+
+---
+
 ## Program.cs e Bootstrap — a guarda `isSwaggerMode`
 
 O `Program.cs` é o ponto de composição. A regra mais importante: **todo módulo que depende de infraestrutura real** (banco, Kafka, CNFG, APIs externas, auth) **deve ser registrado dentro de `if (!isSwaggerMode)`**, para que a geração estática do contrato OpenAPI no build não tente subir infra indisponível.
@@ -507,7 +566,7 @@ public class Program
         builder.Services.AddAutoMapper(
             typeof(Application.Mappings.v1.ModelMappingProfile),
             typeof(Mappings.v1.DtoMappingProfile));
-        builder.Services.AddWatherForecastApiModule();       // Controllers, AppServices, interfaces
+        builder.Services.AddConsigBoilerplateApiModule();    // Controllers, AppServices, interfaces
         builder.Services.AddBmgMemoryCacheManager();
 
         // MÓDULOS DE INFRA — ignorados na geração do Swagger
@@ -518,9 +577,9 @@ public class Program
                 .AddBmgParametersApplication()
                 .AddBmgParametersBrokers();
 
-            builder.Services.AddWatherForecastDatabaseModule(builder.Configuration);
-            // builder.Services.AddWatherForecastNoSqlDatabaseModule(builder.Configuration); // se NoSQL
-            builder.Services.AddWatherForecastApplicationModule();
+            builder.Services.AddConsigBoilerplateDatabaseModule(builder.Configuration);
+            // builder.Services.AddConsigBoilerplateNoSqlDatabaseModule(builder.Configuration); // se NoSQL
+            builder.Services.AddConsigBoilerplateApplicationModule();
             builder.Services.AddBmgAuth(ApplicationPrefix, ApplicationName, builder.Configuration);
             builder.AddBmgApiClient(builder.Configuration.GetValue<int>("ConsigBoilerplate.Api:ApiConsumptionTimeoutMs"));
             builder.Services.AddConsigBoilerplateMetabuscaModule();
@@ -556,6 +615,12 @@ public class Program
 ```
 
 **O que NÃO guardar** (precisa estar visível para o Swagger): `AddAutoMapper`, `Add...ApiModule()`, `Add...ApplicationModule()`, `AddBmgApiProjectDependencies`.
+
+> ⚠️ **`Program.cs` é scaffold fixo — edite, não reescreva.** Ao adicionar uma feature, os **únicos** pontos de inserção são:
+> 1. registrar o profile no `AddAutoMapper(...)` (já cobre `ModelMappingProfile` e `DtoMappingProfile`);
+> 2. registrar módulos de infra **dentro** de `if (!isSwaggerMode)`.
+>
+> **NÃO** reescreva a estrutura de bootstrap, a constante `ApplicationPrefix`/`ApplicationName`, a guarda `isSwaggerMode`, a ordem dos middlewares nem a chamada `AddBmgApiProjectDependencies(...)`. Regenerar o arquivo do zero é a principal causa de `Program.cs` quebrado.
 
 ---
 
@@ -700,7 +765,20 @@ public class ContractController : BmgControllerBase<IContractAppService>
 ```
 
 #### Etapa 7 — Registrar no DI + teste
-- Registrar `IContractService`/`ContractService` no `...ApplicationDependency`, `IContractAppService`/`ContractAppService` no `...ApiDependency`, e `Contracts` no `UnitOfWorkOracle`.
+
+**Todo** Service, AppService, Repository e Profile novo precisa ser registrado — esquecer o registro é a causa mais comum de `InvalidOperationException` em runtime. Use exatamente estas linhas:
+
+```csharp
+// Api/...ApiDependency.cs  → Add{App}ApiModule()
+services.AddScoped<AppServices.v1.Interfaces.I{Nome}AppService, AppServices.v1.{Nome}AppService>();
+
+// Application/...ApplicationDependency.cs  → Add{App}ApplicationModule()
+services.AddScoped<Domain.Services.v1.I{Nome}Service, Services.v1.{Nome}Service>();
+
+// Database/...DatabaseDependency.cs  → Add{App}DatabaseModule()
+services.AddBmgScopedRepository<Repositories.Interfaces.v1.I{Nome}Repository, Repositories.v1.{Nome}Repository>();
+```
+- Registrar também o repositório no `UnitOfWorkOracle` (`Contracts`) e os profiles novos no `AddAutoMapper(...)` do `Program.cs`.
 - Criar `Tests/Core/Application/.../Services/v1/ContractServiceTest.cs` e `Tests/.../Api.Test/v1/ContractControllerTest.cs`.
 - Conferir o contrato: `SWAGGER_GENERATION=true dotnet build`.
 
@@ -771,7 +849,7 @@ Regras institucionais para o contrato OpenAPI (detalhe completo em `.github/copi
 
 **Segurança (`Bmg.Auth`)**: `UseBmgAuth()` obrigatório fora do DEV; autenticação via Entra ID. Proteja endpoints sensíveis com `[Authorize(Roles = "rle-...")]`. Segredos só via `Bmg.Parameter.Manager` (CNFG) — `appsettings` apenas DEV.
 
-**Observabilidade (`Bmg.Logging.Internal`)**: `AddBmgLoggingInternal()`/`UseBmgLoggingInternal()` para logs JSON; `[BmgDynatraceTrace]` obrigatório em métodos públicos de Service e AppService; correlation id `x-bmg-id` propagado; `/healthz` exposto pelo `AddBmgApiProjectDependencies` (probe EKS).
+**Observabilidade (`Bmg.Logging.Internal`)**: `AddBmgLoggingInternal()`/`UseBmgLoggingInternal()` para logs JSON; `[BmgDynatraceTrace]` aplicado **na declaração da classe** de Service e AppService — a anotação na classe já cobre todos os métodos públicos, **não repita o atributo nos métodos**; correlation id `x-bmg-id` propagado; `/healthz` exposto pelo `AddBmgApiProjectDependencies` (probe EKS).
 
 **Workers / Background services**: `BmgScheduleBackgroundService` (jobs agendados) e `BmgBackgroundService` (consumidores contínuos, ex.: Kafka). Health checks embutidos; sinalize `WorkerStateService.Unhealthy()` quando degradado.
 
@@ -787,12 +865,13 @@ Regras institucionais para o contrato OpenAPI (detalhe completo em `.github/copi
 - Guardar todo módulo de infra com `if (!isSwaggerMode)` no `Program.cs`.
 - Usar `Notifier.NotifyAsync` para violação de negócio (→ 422); `TransactionScope` para múltiplas escritas.
 - Acessar dados com Dapper via `GenericRepository` + `SqlBuilder` parametrizado.
-- Aplicar `[BmgDynatraceTrace]` em Services e AppServices; usar `Bmg.Parameter.Manager` para segredos.
+- Aplicar `[BmgDynatraceTrace]` **na classe** de Services e AppServices (nunca nos métodos); usar `Bmg.Parameter.Manager` para segredos.
 - Espelhar a estrutura em `Tests/` e validar `SWAGGER_GENERATION=true dotnet build` antes do PR.
 
 ### ❌ Não fazer
 - Usar `MediatR` (ADR-003) ou `ErrorOr` (ADR-004) — proibidos.
 - Colocar lógica de negócio no Controller ou no AppService.
+- Declarar construtor ou método `Initialize()` em **Controller** ou **AppService** — o acesso à dependência vem da classe base (`AppService` em `BmgControllerBase<I>`, `Service` em `BmgAppServiceBase<I>`). Apenas o **Service** da Application recebe dependências por construtor.
 - Acessar `Database`/`Integrations` diretamente da `Api`, ou infra direta no `Domain`.
 - Lançar `Exception` para validação de negócio (use `Notifier` → 422).
 - Duplicar `*Model` (Domain) e `*Entity` (Database) com as mesmas propriedades só para mapear (duplicidade Sonar) — ver regra anti-duplicidade abaixo.
@@ -822,7 +901,36 @@ Regras institucionais para o contrato OpenAPI (detalhe completo em `.github/copi
 | Integração externa | `{Sistema}ApiManager` (+ `I...`) | `MetabuscaApiManager` |
 | Módulo de DI | `{Contexto}{Camada}Dependency` / `Add{Contexto}{Camada}Module()` | `ConsigBoilerplateApiDependency` |
 | Teste | `{Nome}Test` espelhando a árvore em `Tests/` | `ConsigBoilerplateServiceTest` |
+| Método assíncrono | TODO método que retorna `Task`/`Task<T>` termina em `Async` | `GetWeatherAsync`, `PostAsync` |
 | Versionamento | subpasta `v{n}/` em toda camada | `v1/`, `v2/` |
+
+> **Regra de método assíncrono (obrigatória)**: todo método que retorna `Task` ou `Task<T>` **deve** terminar com o sufixo `Async` — em interfaces, services, appservices, controllers e repositórios. Ex.: `CreateWeatherAsync`, não `CreateWeather`.
+
+---
+
+## `using` canônicos por tipo de arquivo (FONTE ÚNICA — não inventar)
+
+> ⛔ **REGRA**: use **somente** namespaces deste catálogo e dos projetos do próprio serviço (`Bmg.{App}.*`). **NUNCA invente namespaces.** Os namespaces abaixo **NÃO EXISTEM** nesta stack e são proibidos:
+> `Bmg.Infra.Database`, `Bmg.Infra.Database.Repositories`, `Bmg.Commons.Logging`, `Bmg.Commons.Tracing`, `Bmg.Infrastructure.Api.Controllers`, `Bmg.Infrastructure.Observability.Attributes`.
+
+| Base / tipo / atributo usado | Namespace correto |
+|---|---|
+| `BmgControllerBase<I>`, `BmgAppServiceBase<I>`, `BmgServiceBase` | `Bmg.Project.Utils.Base` |
+| `[BmgDynatraceTrace]` | `Bmg.Logging.Internal.Attributes` |
+| `PaginatedData<T>`, `Operation<T>` | `Bmg.Project.Utils.Data` |
+| `IBmgServiceBase` | `Bmg.Project.Utils.Interfaces` |
+| `GenericRepository<,>`, `IGenericRepository<,>`, `SqlBuilder` | `Bmg.Connection.Manager.Data` |
+| `DatabaseConnection` / `DatabaseNoSqlConnection` (enums) | `Bmg.{App}.Domain` |
+| `ILogger<T>` | `Microsoft.Extensions.Logging` |
+| `JsonPatchDocument<T>` | `Microsoft.AspNetCore.JsonPatch` |
+| `[Table]`, `[Column]`, `[Key]` | `System.ComponentModel.DataAnnotations[.Schema]` |
+
+**Bloco mínimo de `using` por arquivo** (`Bmg.{App}` = namespace do serviço):
+
+- **Controller**: `Bmg.{App}.Api.AppServices.v1.Interfaces`, `Bmg.{App}.Api.Dtos.v1.{Feature}`, `Bmg.Project.Utils.Base`, `Microsoft.AspNetCore.Mvc`.
+- **AppService**: `Bmg.Project.Utils.Base`, `Bmg.Project.Utils.Data`, `Bmg.{App}.Api.AppServices.v1.Interfaces`, `Bmg.{App}.Api.Dtos.v1.{Feature}`, `Bmg.{App}.Domain.Models.v1`, `Bmg.{App}.Domain.Services.v1`.
+- **Service (Application)**: `Bmg.Project.Utils.Base`, `Bmg.Project.Utils.Data`, `Bmg.{App}.Domain.Models.v1`, `Bmg.{App}.Domain.Services.v1` (+ `Microsoft.Extensions.Logging` se injetar `ILogger`).
+- **Repository**: `Bmg.Connection.Manager.Data`, `Bmg.{App}.Database.Entities.v1`, `Bmg.{App}.Database.Repositories.Interfaces.v1`, `Bmg.{App}.Domain`, `Dapper`, `System.Data`.
 
 ---
 
