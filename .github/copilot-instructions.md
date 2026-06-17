@@ -280,6 +280,14 @@ CreateMap<Operation<{Nome}Model>, Operation<{Entidade}>>().ReverseMap();
 CreateMap<JsonPatchDocument<{Nome}Model>, JsonPatchDocument<{Entidade}>>().ReverseMap();
 ```
 
+### 17. Replicação estrutural — projetos, esqueleto e remoção de amostras
+
+> Fonte normativa: **`.codegen/archetype-structure.json`** (espelho narrativo em `archetype.md` → "Manifesto de projetos e replicação estrutural").
+
+- **Replicação completa**: todo serviço gerado replica o conjunto de projetos do template e, em cada projeto, os arquivos obrigatórios do seu tipo. **NUNCA** omita `*.csproj` nem `*Dependency.cs`. Só o projeto **Api** tem `Program.cs` e `Properties/launchSettings.json`; projetos de biblioteca/integração não têm.
+- **Rename in-place, sem duplicatas**: renomeie cada projeto no lugar para `Bmg.{App}.*`. O output deve conter **exatamente UM** conjunto `Bmg.{App}.*`. ⛔ **NUNCA** deixe uma pasta/namespace/arquivo `Bmg.ConsigBoilerplate.*` ao lado do renomeado (ex.: `Bmg.PropostaService.Database` **e** `Bmg.ConsigBoilerplate.Database` é erro).
+- **Remoção de amostras**: `FaceTec` e `Metabusca` (e seus projetos `*.Test`), além dos módulos opcionais Kafka/NoSQL/banco em memória, são **exemplos**. Se não usados, **remova por inteiro**: pasta do projeto, entrada no `.sln`, registro de DI no `Program.cs`, port no `Domain` e o Test espelhado. **Nunca** entregue projeto de amostra vazio no output.
+
 ---
 
 ## 📦 Bibliotecas corporativas — Classificação e uso
@@ -540,4 +548,7 @@ builder.Services.AddMeuServicoDatabase(builder.Configuration);
 - [ ] Interface e implementação em **arquivos/pastas separados** (AppService e Repository) — pipeline BMG bloqueia o contrário
 - [ ] Registro de DI feito: AppService no `...ApiDependency`, Service no `...ApplicationDependency`, Repository no `...DatabaseDependency` + `UnitOfWorkOracle`, profiles no `AddAutoMapper`
 - [ ] Todo método `Task` com sufixo `Async`; nenhum token do template (`ConsigBoilerplate`/`Weather`/`Wather`) no código
+- [ ] Estrutura replicada: cada projeto tem seu `*.csproj` + `*Dependency.cs`; só o Api tem `Program.cs` e `Properties/launchSettings.json`
+- [ ] Rename in-place sem duplicatas: existe **um** conjunto `Bmg.{App}.*`, sem pasta/namespace `Bmg.ConsigBoilerplate.*` remanescente
+- [ ] Amostras não usadas (`FaceTec`/`Metabusca`/Kafka/NoSQL) removidas por inteiro (projeto, `.sln`, DI no `Program.cs`, port, Test)
 - [ ] Teste unitário espelhando a estrutura em `Tests/`

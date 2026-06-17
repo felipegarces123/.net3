@@ -57,6 +57,8 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 **/Properties/launchSettings.json
+# Archetype: keep the Api template's launchSettings so the Properties/ skeleton ships with the template
+!Adapters/Driving/Apis/Bmg.ConsigBoilerplate.Api/Properties/launchSettings.json
 
 # StyleCop
 StyleCopReport.xml

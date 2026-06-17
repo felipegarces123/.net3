@@ -46,6 +46,51 @@ Este é um **template de API REST corporativa** construído com **.NET 10 + ASP.
 
 ---
 
+## Manifesto de projetos e replicação estrutural
+
+> Fonte normativa machine-readable: **`.codegen/archetype-structure.json`**. A tabela abaixo é o espelho narrativo. O output gerado **deve replicar a estrutura completa** deste template — projetos, pastas e os arquivos obrigatórios de cada tipo de projeto.
+
+| Projeto | Papel | Arquivos obrigatórios | Remover se não usado? |
+|---|---|---|---|
+| `Bmg.{App}.Domain` | **core** | `*.csproj` | Não |
+| `Bmg.{App}.Application` | **core** | `*.csproj`, `{App}ApplicationDependency.cs` | Não |
+| `Bmg.{App}.Database` | **core** | `*.csproj`, `{App}DatabaseDependency.cs` | Não |
+| `Bmg.{App}.Api` | **core** | `*.csproj`, `Program.cs`, `appsettings.json`, `{App}ApiDependency.cs`, `Properties/launchSettings.json` | Não |
+| `Bmg.{App}.{Sistema}` (integração: `FaceTec`, `Metabusca`) | **sample** | `*.csproj`, `{App}{Sistema}Dependency.cs`, `v1/{Sistema}ApiManager.cs` | **Sim** |
+| `Bmg.{App}.*.Test` | **test** (espelha produção) | `*.csproj`, `Usings.cs` | Junto com o projeto pai |
+| Kafka (`{App}KafkaDependency.cs`) / NoSQL (`{App}NoSqlDatabaseDependency.cs`) / banco em memória | **módulo opcional** | — | **Sim** |
+
+### Renomeação in-place (sem duplicação)
+
+Renomeie cada projeto **no lugar**: pasta, namespace, classe, método de DI e metadados do `.csproj` passam de `Bmg.ConsigBoilerplate.*` para `Bmg.{App}.*`. O output **deve conter exatamente UM** conjunto `Bmg.{App}.*`.
+
+> ⛔ **NUNCA** deixe uma pasta, namespace ou arquivo `Bmg.ConsigBoilerplate.*` **ao lado** do renomeado. Ex.: gerar `Bmg.PropostaService.Database` **e** `Bmg.ConsigBoilerplate.Database` é um erro — só o renomeado pode existir.
+
+### Remoção de projetos de amostra
+
+Os projetos de integração `FaceTec` e `Metabusca` são **exemplos** de adapter de saída. Se o serviço **não** os usa, **remova-os por inteiro** — não deixe projeto de amostra vazio no output:
+
+1. Apague a pasta do projeto (`Adapters/Driven/Integrations/.../Bmg.{App}.{Sistema}/`).
+2. Remova a entrada do projeto no `.sln`.
+3. Remova o registro de DI no `Program.cs` (`builder.Services.Add{App}{Sistema}Module();`).
+4. Remova o port correspondente no `Domain` (`Adapters/Integrations/.../I{Sistema}ApiManager.cs`) e seus DTOs, se não usados.
+5. Remova o projeto de Test espelhado (`Tests/.../Bmg.{App}.{Sistema}.Test/`).
+
+O mesmo vale para os módulos opcionais Kafka, NoSQL e o banco em memória (`{App}MemoryDatabase`): remova o arquivo de dependência e o registro no `Program.cs` quando não forem usados.
+
+### Esqueleto obrigatório por tipo de projeto
+
+Todo projeto gerado replica o esqueleto **completo** do seu tipo — **nunca** omita `*.csproj` nem `*Dependency.cs`:
+
+- **Api** (única executável): `*.csproj` + `Program.cs` + `appsettings.json` + `{App}ApiDependency.cs` + `Properties/launchSettings.json` + subpastas `Controllers/`, `AppServices/`, `Dtos/`, `Validators/`, `Mappings/`.
+- **Application**: `*.csproj` + `{App}ApplicationDependency.cs` + `Services/v{n}/` + `Mappings/v{n}/`. (Sem `Program.cs`/`Properties`.)
+- **Database**: `*.csproj` + `{App}DatabaseDependency.cs` + `Entities/`, `Repositories/`, `UnitOfWork/`. (Sem `Program.cs`/`Properties`.)
+- **Domain**: `*.csproj` + `Models/`, `Services/`, `Adapters/`. (Biblioteca pura — sem `*Dependency.cs`, `Program.cs` ou `Properties`.)
+- **Integração** (`FaceTec`/`Metabusca`): `*.csproj` + `{App}{Sistema}Dependency.cs` + `v1/{Sistema}ApiManager.cs`. **Não** tem `Program.cs` nem `Properties` — só o projeto Api tem.
+- **Test**: `*.csproj` + `Usings.cs`, espelhando a árvore de produção.
+
+---
+
 ## Project Structure
 
 ```text
