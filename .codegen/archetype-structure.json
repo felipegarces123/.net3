@@ -2,6 +2,7 @@
   "$comment": "Canonical project structure for the Bmg .NET hexagonal archetype. Consumed by the code generator (ArchetypeProfiler) to enforce full structural replication, in-place rename, and removal of unused sample projects. Human-readable mirror lives in archetype.md ('Manifesto de projetos e replicacao estrutural') and .github/copilot-instructions.md.",
   "solution_token": "ConsigBoilerplate",
   "sample_tokens": ["Weather", "wfcst", "weather-forecast-api"],
+  "build_aggregator_file": "*.sln",
   "rename": {
     "in_place": true,
     "rule": "Rename every project folder, namespace, class, DI method and .csproj metadata from the token to Bmg.{App}.*. The output must contain EXACTLY ONE set of Bmg.{App}.* projects. NEVER leave a Bmg.ConsigBoilerplate.* folder, namespace or file beside the renamed one."
@@ -14,30 +15,34 @@
     {
       "key": "Domain",
       "role": "core",
+      "singleton": true,
       "name_template": "Bmg.{Token}.Domain",
       "path_template": "Core/Domain/Bmg.{Token}.Domain",
       "required_files": ["Bmg.{Token}.Domain.csproj"],
-      "notes": "Library. No *Dependency.cs, no Program.cs, no Properties/."
+      "notes": "Library. Instantiated exactly once. No *Dependency.cs, no Program.cs, no Properties/."
     },
     {
       "key": "Application",
       "role": "core",
+      "singleton": true,
       "name_template": "Bmg.{Token}.Application",
       "path_template": "Core/Application/Bmg.{Token}.Application",
       "required_files": ["Bmg.{Token}.Application.csproj", "{Token}ApplicationDependency.cs"],
-      "notes": "Library. Has DI module; no Program.cs, no Properties/."
+      "notes": "Library. Instantiated exactly once. Has DI module; no Program.cs, no Properties/."
     },
     {
       "key": "Database",
       "role": "core",
+      "singleton": true,
       "name_template": "Bmg.{Token}.Database",
       "path_template": "Adapters/Driven/Bmg.{Token}.Database",
       "required_files": ["Bmg.{Token}.Database.csproj", "{Token}DatabaseDependency.cs"],
-      "notes": "Library. Has DI module; no Program.cs, no Properties/."
+      "notes": "Library. Instantiated exactly once. Has DI module; no Program.cs, no Properties/."
     },
     {
       "key": "Api",
       "role": "core",
+      "singleton": true,
       "name_template": "Bmg.{Token}.Api",
       "path_template": "Adapters/Driving/Apis/Bmg.{Token}.Api",
       "required_files": [
@@ -47,7 +52,7 @@
         "{Token}ApiDependency.cs",
         "Properties/launchSettings.json"
       ],
-      "notes": "Executable entry point. ONLY project that has Program.cs and Properties/."
+      "notes": "Executable entry point. Instantiated exactly once. ONLY project that has Program.cs and Properties/."
     },
     {
       "key": "Integration",
