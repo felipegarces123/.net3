@@ -35,13 +35,13 @@ Este é um **template de API REST corporativa** construído com **.NET 10 + ASP.
 Este guia descreve **ações obrigatórias**, não apenas exemplos ilustrativos. Os blocos de código com cabeçalho `// EDITAR ...` ou listados em um *Checklist de arquivos* **devem ser executados** — não são opcionais.
 
 1. **Toda etapa "EDITAR" em arquivo existente é obrigatória.** Criar as classes novas **não** conclui a tarefa: é preciso **voltar e editar** os arquivos de registro (`*Dependency.cs`, `UnitOfWorkOracle` + sua interface, `UnitOfWorkOracleContext`, `Program.cs`, `Bmg.{Servico}.Api.csproj`). Esse é o passo mais esquecido.
-2. **Todo projeto novo exige o arquivo `.csproj`.** Criar apenas `*Dependency.cs` ou `*Facade.cs` **não** cria o projeto. É obrigatório criar `Bmg.{Servico}.{Nome}.csproj` e adicioná-lo à solution (`dotnet sln add ...`).
+2. **Todo projeto exige `.csproj` + entrada no `.sln` — inclusive os 4 core.** Não é só integração: `Bmg.{Servico}.Domain`, `.Application`, `.Database` e `.Api` **também** precisam de `.csproj` escrito explicitamente (não confie no `dotnet new`/IDE) e de `dotnet sln add`. Criar só `*Dependency.cs`/`*Facade.cs` **não** cria o projeto. Modelos prontos em **"Projetos e solution"**. Sem `.csproj`, o projeto fica fora da build.
 3. **A tarefa só termina quando todos os arquivos do "Checklist de arquivos" da seção correspondente** (nova entidade / nova integração) tiverem sido **criados E editados**.
 4. **Crie já com o nome certo — não gere como `ConsigBoilerplate` para renomear depois.** O contexto da solução é `Bmg.{Servico}` (`{Servico}` = nome do serviço em PascalCase; no template-base aparece como `ConsigBoilerplate`). Ao **criar** qualquer projeto, classe ou namespace, use **o mesmo prefixo da solução atual** (`Bmg.{Servico}.*`) — confira o nome do `.sln`/`.csproj` existentes e siga-o. **Nunca** escreva `ConsigBoilerplate` literal num serviço com outro nome. Ver **"Nomeação e bootstrap do contexto"**.
 5. **Repositório (Dapper) = par interface + implementação — sempre os dois (ver 3a).** Para uma entidade que persiste, crie `I{Entidade}Repository : IGenericRepository<DatabaseConnection, {Entidade}>` (em `Database/Repositories/Interfaces/v{n}/`) **e** `{Entidade}Repository : GenericRepository<DatabaseConnection, {Entidade}>` (em `Database/Repositories/v{n}/`). Nunca acesse o banco via EF/`DbContext` direto.
 6. **Integração externa = projeto próprio + `ApiBase` + `IBmgApiClient` (ver 3b).** Toda integração é um projeto sob `Adapters/Driven/Integrations/Apis/` que implementa um port do `Domain`; a classe (`{Nome}ApiManager`/`{Nome}Facade`) **herda `ApiBase`** e **injeta `IBmgApiClient`** (`using Bmg.Api.Client;` + `using Bmg.Api.Client.Base;`) — nunca um `IApiClient` genérico. Não esqueça o `.csproj` (regra 2), o `ProjectReference` no `.Api` e o registro no `Program.cs` (regra 1).
 7. **Todo repositório novo entra no UnitOfWork (ver 3d).** Exponha-o no `UnitOfWorkOracle` como `public I{Entidade}Repository {Entidades} => _provider.GetRequiredService<I{Entidade}Repository>();` **e** declare a mesma assinatura na interface `IUnitOfWorkOracle`. Adicione também `public DbSet<{Entidade}> {Entidades} { get; set; }` no `UnitOfWorkOracleContext` (scaffolding EF, `[Obsolete]`).
-8. **Validação final obrigatória**: `dotnet build` (compila — prova que registros e `ProjectReference` existem) **e** `SWAGGER_GENERATION=true dotnet build` (gera o contrato).
+8. **Validação final obrigatória**: rode a **Autochecagem pós-geração** (seção própria) — detecta `.csproj` faltando, projeto fora do `.sln` e repositório órfão — e finalize com `dotnet build` **e** `SWAGGER_GENERATION=true dotnet build`.
 
 ---
 
@@ -221,6 +221,117 @@ Bmg.ConsigBoilerplate/                         # Solution · app: weather-foreca
             ├── Bmg/Bmg.ConsigBoilerplate.Metabusca.Test/v1/MetabuscaApiManagerTest.cs
             └── Bmg.ConsigBoilerplate.FaceTec.Test/v1/FaceTecApiManagerTest.cs
 ```
+
+---
+
+## Projetos e solution — `.csproj` de todo projeto (obrigatório)
+
+⚠️ **Para o gerador:** cada projeto (core, integração e teste) é uma pasta **com um `.csproj`**. Não confie no `dotnet new`/IDE para criá-lo — **escreva o `.csproj` explicitamente** e registre no `.sln`. Sem `.csproj`, o projeto não existe e o build quebra. Vale para os **4 core** (`Domain`, `Application`, `Database`, `Api`), não só integrações.
+
+**Grafo de referências:**
+```text
+Domain        → (só PackageReference Bmg.*)
+Database      → Domain
+Application   → Domain, Database
+Api           → Application, Database, {cada integração}
+Integração    → Domain
+{Proj}.Test   → {Proj}
+```
+
+```xml
+<!-- Core/Domain/Bmg.{Servico}.Domain/Bmg.{Servico}.Domain.csproj -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Bmg.Project.Utils" Version="10.*" />
+    <PackageReference Include="Bmg.Connection.Manager" Version="10.*" />
+  </ItemGroup>
+</Project>
+```
+
+```xml
+<!-- Adapters/Driven/Bmg.{Servico}.Database/Bmg.{Servico}.Database.csproj -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Bmg.Connection.Manager" Version="10.*" />
+    <!-- + Bmg.NoSqlConnection.Manager se NoSQL; EF Core p/ o UnitOfWorkOracleContext -->
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Core\Domain\Bmg.{Servico}.Domain\Bmg.{Servico}.Domain.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+```xml
+<!-- Core/Application/Bmg.{Servico}.Application/Bmg.{Servico}.Application.csproj -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Bmg.Project.Utils" Version="10.*" />
+    <!-- + Bmg.Cache.Manager se usar cache -->
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Core\Domain\Bmg.{Servico}.Domain\Bmg.{Servico}.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\Driven\Bmg.{Servico}.Database\Bmg.{Servico}.Database.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+```xml
+<!-- Adapters/Driving/Apis/Bmg.{Servico}.Api/Bmg.{Servico}.Api.csproj -->
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>annotations</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <AssemblyName>{sigla}-{servico-fisico}</AssemblyName> <!-- ex.: prpst-proposta-service-api -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Bmg.Api.Client" Version="10.*" />
+    <PackageReference Include="Bmg.Auth" Version="10.*" />
+    <PackageReference Include="Bmg.Cache.Manager" Version="10.*" />
+    <PackageReference Include="Bmg.Connection.Manager" Version="10.*" />
+    <PackageReference Include="Bmg.Logging.Internal" Version="10.*" />
+    <PackageReference Include="Bmg.Project.Utils" Version="10.*" />
+    <!-- + Bmg.Kafka se Kafka; Bmg.NoSqlConnection.Manager se NoSQL -->
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Core\Application\Bmg.{Servico}.Application\Bmg.{Servico}.Application.csproj" />
+    <ProjectReference Include="..\..\..\Driven\Bmg.{Servico}.Database\Bmg.{Servico}.Database.csproj" />
+    <!-- + 1 ProjectReference por integração (ver "Integrações externas") -->
+  </ItemGroup>
+</Project>
+```
+
+> **Teste**: SDK `Microsoft.NET.Sdk` com `Microsoft.NET.Test.Sdk` + xUnit + Moq e `<ProjectReference>` ao projeto testado. **Integração**: `.csproj` no checklist da seção "Integrações externas".
+
+**Registrar TODOS os projetos no `.sln`** (o CLI gera os GUIDs — não escreva entradas `Project(...)` à mão):
+```bash
+for p in \
+  Core/Domain/Bmg.{Servico}.Domain \
+  Adapters/Driven/Bmg.{Servico}.Database \
+  Core/Application/Bmg.{Servico}.Application \
+  Adapters/Driving/Apis/Bmg.{Servico}.Api \
+  Adapters/Driven/Integrations/Apis/*/Bmg.{Servico}.* \
+  Tests/**/Bmg.{Servico}.*.Test ; do
+    dotnet sln Bmg.{Servico}.sln add "$p"/*.csproj
+done
+```
+> **Invariante**: nº de `.csproj` em disco **=** nº de entradas `Project(...)` no `.sln`. Projeto fora do `.sln` é ignorado pela build da solução.
 
 ---
 
@@ -987,6 +1098,8 @@ public DbSet<Contract> Contracts { get; set; }
 
 > ✅ **Concluído quando** `dotnet build` compila **e** os 7 arquivos de EDIÇÃO contêm as novas linhas. ⚠️ Compilar **não** garante o registro: faltar um `AddScoped`/`AddBmgScopedRepository` compila e só falha em runtime (`Unable to resolve service...`). Confira manualmente cada `*Dependency.cs`.
 
+**Invariante de wiring (conte antes de concluir)** — para **cada** entidade persistida em banco as contagens devem bater: `1 Entity`, `1 I{Entidade}Repository`, `1 {Entidade}Repository`, `1` registro `AddBmgScopedRepository` no `DatabaseDependency`, `1` propriedade em `IUnitOfWorkOracle`, `1` em `UnitOfWorkOracle`, `1 DbSet<{Entidade}>` no `Context`. Contagem que não bate = **órfão** (ex.: repositório criado sem registro/UoW) → corrija antes de finalizar.
+
 ---
 
 ## Testes unitários
@@ -1120,6 +1233,38 @@ dotnet test --collect:"XPlat Code Coverage"       # testes com cobertura
 dotnet tool restore                               # ferramentas (necessário p/ gerar swagger)
 SWAGGER_GENERATION=true dotnet build              # gera swagger-specs/swagger-v*.json
 ```
+
+---
+
+## Autochecagem pós-geração (obrigatória)
+
+Antes de declarar a geração concluída, rode na raiz da solução. **Qualquer linha de saída = geração incompleta** — complete os arquivos e repita.
+```bash
+S=PropostaService    # nome do contexto ({Servico})
+
+# 1) Todo diretório de projeto tem .csproj
+find . -type d -name "Bmg.$S.*" | while read -r d; do
+  ls "$d"/*.csproj >/dev/null 2>&1 || echo "SEM .csproj: $d"
+done
+
+# 2) Todo .csproj está no .sln
+for c in $(find . -name "Bmg.$S.*.csproj"); do
+  grep -q "$(basename "$c")" ./*.sln || echo "FORA do .sln: $c"
+done
+
+# 3) Cada repositório: registrado no Dependency E exposto no UnitOfWork
+for i in $(grep -rhoE 'I[A-Za-z]+Repository' Adapters/Driven/Bmg.$S.Database/Repositories/Interfaces/v1 2>/dev/null | sort -u); do
+  grep -rq "$i" Adapters/Driven/Bmg.$S.Database/*Dependency.cs                    || echo "NAO registrado: $i"
+  grep -rq "$i" Adapters/Driven/Bmg.$S.Database/UnitOfWork/v1/UnitOfWorkOracle.cs || echo "FORA do UnitOfWork: $i"
+done
+
+# 4) Sem ConsigBoilerplate residual nos arquivos do serviço
+grep -rl 'ConsigBoilerplate' --include='*.cs' . | grep "$S" && echo "VAZOU ConsigBoilerplate"
+
+# 5) Compila e gera o contrato
+dotnet build && SWAGGER_GENERATION=true dotnet build
+```
+Saída limpa + build verde = pronto.
 
 ---
 
