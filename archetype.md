@@ -355,20 +355,71 @@ namespace Bmg.ConsigBoilerplate.Database.Repositories.v1
 
 ### 3b. Integração externa (`Bmg.Api.Client`)
 
-`MetabuscaApiManager` / `FaceTecApiManager` implementam os ports de `Domain/Adapters/Integrations` consumindo APIs internas via `Bmg.Api.Client` (encapsula Flurl, propaga `x-bmg-id`, aplica rate limit e logging):
+Cada integração externa é um **projeto próprio** sob `Adapters/Driven/Integrations/Apis/` que implementa um port de `Domain/Adapters/Integrations`. A classe herda `ApiBase` e injeta **`IBmgApiClient`** (de `Bmg.Api.Client.Base`) — que encapsula Flurl, propaga `x-bmg-id`, aplica rate limit e logging. Padrão real (`MetabuscaApiManager`):
 
 ```csharp
-// Adapters/Driven/Integrations/Apis/.../v1/FaceTecApiManager.cs (padrão de chamada segura)
-var response = await ApiClient
-    .Url("https://api-destino/autenticar")
-    .WithBmgSecuredData()
-    .WithOAuthBearerToken(token.AccessToken)
-    .PostJsonAsync(request);
+using Bmg.Api.Client;
+using Bmg.Api.Client.Base;        // IBmgApiClient, ApiBase
+using Flurl;
+
+public class MetabuscaApiManager : ApiBase, IMetabuscaApiManager
+{
+    public const string EndPointCliente = "api/v1/cliente";
+
+    public MetabuscaApiManager(IBmgApiClient apiClient, ILogger<MetabuscaApiManager> logger, IConfiguration configuration)
+        : base(configuration.GetValue<string>("Apis:Metabusca:PathUrl"), apiClient, logger) { }
+
+    public async Task<ReceitaFederalResponse> ValidaCpfAsync(string cpf)
+    {
+        try
+        {
+            return await ApiClient
+                .Url(Url.Combine(EndPointCliente, cpf, "validar"))
+                .WithBmgHeaders<ReceitaFederalResponse>(HeaderType.Response)
+                .PostAsync(cancellationToken: CancellationToken)
+                .ReceiveJson<ReceitaFederalResponse>();
+        }
+        catch (FlurlHttpException ex)
+        {
+            await LogApiExceptionAsync(ex);   // log estruturado herdado de ApiBase
+            throw;
+        }
+    }
+}
 ```
+
+> O passo a passo para criar uma nova integração (projeto, Facade, dependência, registro) está em **"Integrações externas — projeto por integração"**.
 
 ### 3c. Fila / Kafka (opcional)
 
 `Domain/Adapters/Integrations/Queues/WeatherConsumerService/WeatherMessage.cs` define o contrato da mensagem; o consumidor é registrado por `ConsigBoilerplateKafkaDependency` e ativado em `Program.cs` apenas quando o serviço usa Kafka.
+
+### 3d. UnitOfWork — `UnitOfWorkOracle` e `UnitOfWorkOracleContext`
+
+O `UnitOfWorkOracle` é o agregador de repositórios injetado na `Application`. Expõe cada repositório como propriedade resolvida sob demanda via `IServiceProvider` (a interface `IUnitOfWorkOracle` declara a mesma assinatura):
+
+```csharp
+public class UnitOfWorkOracle : IUnitOfWorkOracle
+{
+    private readonly IServiceProvider _provider;
+    public UnitOfWorkOracle(IServiceProvider provider) => _provider = provider;
+
+    public IWeatherRepository Weathers => _provider.GetRequiredService<IWeatherRepository>();
+    // Uma propriedade por repositório novo
+}
+```
+
+O `UnitOfWorkOracleContext` é um `DbContext` (EF Core) com um `DbSet<>` por entidade. **Atenção**: no template ele está marcado `[Obsolete]` — *"o uso de EF Core não está liberado no Banco Bmg... por hora este UnitOfWork não deve ser utilizado"*. Existe apenas para facilitar uma futura transição; a persistência real é **Dapper via `GenericRepository`**.
+
+```csharp
+[Obsolete("EF Core não liberado no Banco Bmg — não utilizar por hora")]
+public class UnitOfWorkOracleContext : DbContext, IUnitOfWorkOracleContext
+{
+    public UnitOfWorkOracleContext(DbContextOptions<UnitOfWorkOracleContext> options) : base(options) { }
+
+    public DbSet<Weather> Weathers { get; set; }   // um DbSet por entidade
+}
+```
 
 ---
 
@@ -559,6 +610,86 @@ public class Program
 
 ---
 
+## Registro de dependências (DI por camada)
+
+Cada camada tem **uma classe estática de dependência** que expõe um método de extensão `Add...Module(...)`, chamado no `Program.cs`. Ao criar um novo AppService / Service / Repository, registre-o na classe correspondente.
+
+**API — `Adapters/Driving/Apis/.../ConsigBoilerplateApiDependency.cs`** (`AddWatherForecastApiModule`): registra os **AppServices**.
+```csharp
+public static void AddWatherForecastApiModule(this IServiceCollection services)
+{
+    services.AddScoped<IConsigBoilerplateAppService, ConsigBoilerplateAppService>();
+    services.AddScoped<IPropostaAppService, PropostaAppService>();   // ← novo AppService
+}
+```
+
+**Application — `Core/Application/.../ConsigBoilerplateApplicationDependency.cs`** (`AddWatherForecastApplicationModule`): registra os **Domain Services**.
+```csharp
+public static void AddWatherForecastApplicationModule(this IServiceCollection services)
+{
+    services.AddScoped<IConsigBoilerplateService, ConsigBoilerplateService>();
+    services.AddScoped<IUsuarioService, UsuarioService>();          // ← novo Service
+}
+```
+
+**Database — `Adapters/Driven/.../ConsigBoilerplateDatabaseDependency.cs`** (`AddWatherForecastDatabaseModule`): registra o `UnitOfWork`, as conexões e os **repositórios** (via `AddBmgScopedRepository`).
+```csharp
+public static void AddWatherForecastDatabaseModule(this IServiceCollection services, IConfiguration configuration)
+{
+    services.AddScoped<IUnitOfWorkOracle, UnitOfWorkOracle>();
+
+    services.AddBmgConnectionManager<DatabaseConnection>()
+        .AddConnection<IUnitOfWorkOracleContext, UnitOfWorkOracleContext>(
+            DatabaseConnection.Oracle,                              // chave ÚNICA por conexão
+            (provider, options) => options.UseInMemoryDatabase("teste_api"));
+            // PROD: options.UseOracle(configuration.GetConnectionString("ExadataConnection"))
+
+    services.AddBmgScopedRepository<IWeatherRepository, WeatherRepository>();
+    services.AddBmgScopedRepository<IUsuarioRepository, UsuarioRepository>();  // ← novo repositório
+}
+```
+> Use `AddBmgScopedRepository<IInterface, Implementação>()` — **interface + implementação** (não a interface duas vezes).
+
+---
+
+## Integrações externas — projeto por integração
+
+Toda integração externa (Metabusca, Consig, FaceTec, PN, ...) é um **projeto e classe de implementação próprios** em `Adapters/Driven/Integrations/Apis/`, implementando um port declarado no `Domain`:
+
+- **Port (Domain)**: `Bmg.ConsigBoilerplate.Domain.Adapters.Integrations.Apis.{Bmg|Vendor}.{Nome}.v{n}` — ex.: `...Apis.Bmg.Metabusca.v1.IMetabuscaApiManager`.
+- **Projeto (Driven)**: integrações **BMG** ficam sob `Integrations/Apis/Bmg/Bmg.ConsigBoilerplate.{Nome}/`; integrações de **terceiros/parceiros** (ex.: `PN`, `Consig`) sob `Integrations/Apis/{Nome}/Bmg.ConsigBoilerplate.{Nome}/`.
+- **Classe de implementação** em `v{n}/`: `{Nome}ApiManager` (ou `{Nome}Facade`), herdando `ApiBase` e injetando **`IBmgApiClient`** (`using Bmg.Api.Client;` + `using Bmg.Api.Client.Base;`). Não use um `IApiClient` genérico — use `IBmgApiClient`.
+- **Classe de dependência**: `ConsigBoilerplate{Nome}Dependency` com `AddConsigBoilerplate{Nome}Module()` registrando o port → implementação.
+- **Referência de projeto no `.Api` (OBRIGATÓRIO)**: **todo** projeto de integração criado deve ser adicionado como `<ProjectReference>` no `Adapters/Driving/Apis/Bmg.ConsigBoilerplate.Api/Bmg.ConsigBoilerplate.Api.csproj`. Sem essa referência, o `Program.cs` **não enxerga** `AddConsigBoilerplate{Nome}Module()` e o build quebra.
+- **Registro no `Program.cs`**: `builder.Services.AddConsigBoilerplate{Nome}Module();` dentro do `if (!isSwaggerMode)`.
+
+```csharp
+// 1) Adapters/Driven/Integrations/Apis/PN/Bmg.ConsigBoilerplate.PN/ConsigBoilerplatePNDependency.cs
+public static class ConsigBoilerplatePNDependency
+{
+    public static void AddConsigBoilerplatePNModule(this IServiceCollection services)
+        => services.AddScoped<IPNApiManager, PNFacade>();   // port → implementação
+}
+```
+
+```xml
+<!-- 2) Bmg.ConsigBoilerplate.Api.csproj — adicione TODO projeto de integração criado -->
+<ItemGroup>
+  <ProjectReference Include="..\..\..\Driven\Integrations\Apis\Bmg\Bmg.ConsigBoilerplate.Metabusca\Bmg.ConsigBoilerplate.Metabusca.csproj" />
+  <ProjectReference Include="..\..\..\Driven\Integrations\Apis\Bmg.ConsigBoilerplate.FaceTec\Bmg.ConsigBoilerplate.FaceTec.csproj" />
+  <ProjectReference Include="..\..\..\Driven\Integrations\Apis\PN\Bmg.ConsigBoilerplate.PN\Bmg.ConsigBoilerplate.PN.csproj" />          <!-- novo -->
+  <ProjectReference Include="..\..\..\Driven\Integrations\Apis\Consig\Bmg.ConsigBoilerplate.Consig\Bmg.ConsigBoilerplate.Consig.csproj" /> <!-- novo -->
+</ItemGroup>
+```
+
+```csharp
+// 3) Program.cs  (dentro de if (!isSwaggerMode))
+builder.Services.AddConsigBoilerplatePNModule();
+builder.Services.AddConsigBoilerplateConsigModule();
+```
+
+---
+
 ## Geração de Swagger (API First) — Quality Gate
 
 O contrato OpenAPI é gerado **automaticamente no build** quando `SWAGGER_GENERATION=true`, vindo da `Bmg.Project.Utils` via `buildTransitive` (sem configuração local de geração no `.csproj`).
@@ -700,7 +831,15 @@ public class ContractController : BmgControllerBase<IContractAppService>
 ```
 
 #### Etapa 7 — Registrar no DI + teste
-- Registrar `IContractService`/`ContractService` no `...ApplicationDependency`, `IContractAppService`/`ContractAppService` no `...ApiDependency`, e `Contracts` no `UnitOfWorkOracle`.
+Registre em cada classe de dependência (detalhe em **"Registro de dependências (DI por camada)"**):
+```csharp
+// ApplicationDependency   → services.AddScoped<IContractService, ContractService>();
+// ApiDependency           → services.AddScoped<IContractAppService, ContractAppService>();
+// DatabaseDependency      → services.AddBmgScopedRepository<IContractRepository, ContractRepository>();
+// UnitOfWorkOracle        → public IContractRepository Contracts => _provider.GetRequiredService<IContractRepository>();
+// UnitOfWorkOracleContext → public DbSet<Contract> Contracts { get; set; }   // scaffolding EF ([Obsolete])
+```
+- **Integração externa?** Crie o projeto + `{Nome}ApiManager`/`Facade` + `AddConsigBoilerplate{Nome}Module()`, **adicione o `<ProjectReference>` do projeto no `Bmg.ConsigBoilerplate.Api.csproj`** e registre no `Program.cs` (ver **"Integrações externas — projeto por integração"**).
 - Criar `Tests/Core/Application/.../Services/v1/ContractServiceTest.cs` e `Tests/.../Api.Test/v1/ContractControllerTest.cs`.
 - Conferir o contrato: `SWAGGER_GENERATION=true dotnet build`.
 
@@ -872,3 +1011,5 @@ SWAGGER_GENERATION=true dotnet build              # gera swagger-specs/swagger-v
 **Validação retornando 400 quando deveria ser 422** → regra de negócio sendo validada no DTO/Validator. Validação de contrato → 400 (Validator); regra de negócio → `Notifier.NotifyAsync` no `Application` → 422.
 
 **Rota não versionada / 404 inesperado** → faltou `v{n}/` na subpasta ou `[ApiVersion]`/`[Route("v{version:apiVersion}/...")]` no Controller.
+
+**`AddConsigBoilerplate{Nome}Module()` não existe / build quebra ao registrar integração** → faltou o `<ProjectReference>` do projeto de integração no `Bmg.ConsigBoilerplate.Api.csproj`. Toda integração criada precisa ser referenciada pelo `.Api`.
