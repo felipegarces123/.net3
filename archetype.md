@@ -34,21 +34,38 @@ Este é um **template de API REST corporativa** construído com **.NET 10 + ASP.
 
 Este guia descreve **ações obrigatórias**, não apenas exemplos ilustrativos. Os blocos de código com cabeçalho `// EDITAR ...` ou listados em um *Checklist de arquivos* **devem ser executados** — não são opcionais.
 
-1. **Toda etapa "EDITAR" em arquivo existente é obrigatória.** Criar as classes novas **não** conclui a tarefa: é preciso **voltar e editar** os arquivos de registro (`*Dependency.cs`, `UnitOfWorkOracle` + sua interface, `UnitOfWorkOracleContext`, `Program.cs`, `Bmg.ConsigBoilerplate.Api.csproj`). Esse é o passo mais esquecido.
-2. **Todo projeto novo exige o arquivo `.csproj`.** Criar apenas `*Dependency.cs` ou `*Facade.cs` **não** cria o projeto. É obrigatório criar `Bmg.ConsigBoilerplate.{Nome}.csproj` e adicioná-lo à solution (`dotnet sln add ...`).
+1. **Toda etapa "EDITAR" em arquivo existente é obrigatória.** Criar as classes novas **não** conclui a tarefa: é preciso **voltar e editar** os arquivos de registro (`*Dependency.cs`, `UnitOfWorkOracle` + sua interface, `UnitOfWorkOracleContext`, `Program.cs`, `Bmg.{Servico}.Api.csproj`). Esse é o passo mais esquecido.
+2. **Todo projeto novo exige o arquivo `.csproj`.** Criar apenas `*Dependency.cs` ou `*Facade.cs` **não** cria o projeto. É obrigatório criar `Bmg.{Servico}.{Nome}.csproj` e adicioná-lo à solution (`dotnet sln add ...`).
 3. **A tarefa só termina quando todos os arquivos do "Checklist de arquivos" da seção correspondente** (nova entidade / nova integração) tiverem sido **criados E editados**.
-4. **Renomeie o contexto ao criar o serviço**: troque `Bmg.ConsigBoilerplate` por `Bmg.{Servico}` (nome do serviço em PascalCase) em **todos** os projetos, pastas, namespaces, assembly e classes — ver **"Renomeação do contexto"**. O token `ConsigBoilerplate` **não deve sobrar** no código final.
-5. **Validação final obrigatória**: `dotnet build` (compila — prova que registros e `ProjectReference` existem) **e** `SWAGGER_GENERATION=true dotnet build` (gera o contrato).
+4. **Crie já com o nome certo — não gere como `ConsigBoilerplate` para renomear depois.** O contexto da solução é `Bmg.{Servico}` (`{Servico}` = nome do serviço em PascalCase; no template-base aparece como `ConsigBoilerplate`). Ao **criar** qualquer projeto, classe ou namespace, use **o mesmo prefixo da solução atual** (`Bmg.{Servico}.*`) — confira o nome do `.sln`/`.csproj` existentes e siga-o. **Nunca** escreva `ConsigBoilerplate` literal num serviço com outro nome. Ver **"Nomeação e bootstrap do contexto"**.
+5. **Repositório (Dapper) = par interface + implementação — sempre os dois (ver 3a).** Para uma entidade que persiste, crie `I{Entidade}Repository : IGenericRepository<DatabaseConnection, {Entidade}>` (em `Database/Repositories/Interfaces/v{n}/`) **e** `{Entidade}Repository : GenericRepository<DatabaseConnection, {Entidade}>` (em `Database/Repositories/v{n}/`). Nunca acesse o banco via EF/`DbContext` direto.
+6. **Integração externa = projeto próprio + `ApiBase` + `IBmgApiClient` (ver 3b).** Toda integração é um projeto sob `Adapters/Driven/Integrations/Apis/` que implementa um port do `Domain`; a classe (`{Nome}ApiManager`/`{Nome}Facade`) **herda `ApiBase`** e **injeta `IBmgApiClient`** (`using Bmg.Api.Client;` + `using Bmg.Api.Client.Base;`) — nunca um `IApiClient` genérico. Não esqueça o `.csproj` (regra 2), o `ProjectReference` no `.Api` e o registro no `Program.cs` (regra 1).
+7. **Todo repositório novo entra no UnitOfWork (ver 3d).** Exponha-o no `UnitOfWorkOracle` como `public I{Entidade}Repository {Entidades} => _provider.GetRequiredService<I{Entidade}Repository>();` **e** declare a mesma assinatura na interface `IUnitOfWorkOracle`. Adicione também `public DbSet<{Entidade}> {Entidades} { get; set; }` no `UnitOfWorkOracleContext` (scaffolding EF, `[Obsolete]`).
+8. **Validação final obrigatória**: `dotnet build` (compila — prova que registros e `ProjectReference` existem) **e** `SWAGGER_GENERATION=true dotnet build` (gera o contrato).
 
 ---
 
-## Renomeação do contexto (OBRIGATÓRIO ao criar um serviço)
+## Nomeação e bootstrap do contexto (criar já com o nome certo)
 
-Ao gerar um serviço a partir deste template, **renomeie o contexto** `ConsigBoilerplate` para o nome do serviço: `Bmg.ConsigBoilerplate.*` → `Bmg.{Servico}.*`. O token `ConsigBoilerplate` **não deve sobrar** no código final.
+**Princípio: crie já com o nome certo — não gere como `ConsigBoilerplate` para renomear depois.** O contexto da solução é `Bmg.{Servico}.*` e todo artefato novo deve nascer com esse prefixo. O rename em massa (sed) abaixo é **fallback**, não o caminho principal.
 
 **Tokens**
 - `{Servico}` — nome do serviço em **PascalCase**, sem espaços (ex.: `CreditoConsignado`). Usado em projetos, pastas, namespaces e classes: `Bmg.{Servico}.*`.
 - `{sigla}` / `{servico-fisico}` — identidade **física** da aplicação: sigla (ex.: `ccsg`) e nome em **kebab-case** (ex.: `credito-consignado`). Usados em `ApplicationPrefix` / `ApplicationName` / `<AssemblyName>` / governança (`sigla-nome-servico-api`).
+
+### Bootstrap de um serviço novo (preferido) — `dotnet new`
+O template é empacotado (`Bmg.Template.Net.Api.<versao>.nupkg`, presente na raiz). Gere o serviço **já nomeado** — o motor do `dotnet new` substitui o `sourceName` na criação, então **nenhum rename manual é necessário**:
+```bash
+dotnet new install ./Bmg.Template.Net.Api.<versao>.nupkg
+dotnet new <short-name-do-template> -n Bmg.{Servico}   # ex.: -n Bmg.CreditoConsignado
+```
+> O `<short-name-do-template>` e o `sourceName` (token de contexto, ex.: `ConsigBoilerplate`) estão em `.template.config/template.json`. Confirme-os antes de gerar.
+
+### Ao adicionar artefatos a um serviço já criado
+Use sempre **o prefixo da solução atual** (`Bmg.{Servico}.*`). Leia o nome do `.sln` e dos `.csproj` existentes e siga-o — não introduza `ConsigBoilerplate` nem outro nome. Cada novo projeto/classe já nasce correto (nada a renomear).
+
+### Fallback — renomear uma solução já clonada como `ConsigBoilerplate`
+Use **somente** se a solução já foi copiada com o nome do template e precisa ser renomeada de uma vez. O token `ConsigBoilerplate` **não deve sobrar** no código final.
 
 **O que renomear (`ConsigBoilerplate` → `{Servico}`)**
 
@@ -720,6 +737,8 @@ public static void AddWatherForecastDatabaseModule(this IServiceCollection servi
 ## Integrações externas — projeto por integração
 
 Toda integração externa (Metabusca, Consig, FaceTec, PN, ...) é um **projeto .NET próprio** em `Adapters/Driven/Integrations/Apis/` que implementa um port declarado no `Domain`. **Criar apenas a classe `*Dependency.cs` ou `*Facade.cs` NÃO cria o projeto** — execute o checklist inteiro.
+
+> 📌 Nos exemplos abaixo, `ConsigBoilerplate` é o contexto do template-base. **Crie já com o prefixo da sua solução** (`Bmg.{Servico}.*`, ex.: `Bmg.{Servico}.PN`, `{Servico}PNDependency`, `Add{Servico}PNModule()`) — não renomeie depois.
 
 **Convenções**
 - **Port (Domain)**: integrações **BMG** → `...Domain.Adapters.Integrations.Apis.Bmg.{Nome}.v{n}` (ex.: `...Apis.Bmg.Metabusca.v1.IMetabuscaApiManager`); **terceiros/parceiros** → `...Domain.Adapters.Integrations.Apis.{Nome}.v{n}` (ex.: `...Apis.FaceTec.v1.IFaceTecApiManager`, **sem** o segmento `Bmg`).
