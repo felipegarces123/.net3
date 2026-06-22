@@ -30,6 +30,71 @@ Este é um **template de API REST corporativa** construído com **.NET 10 + ASP.
 
 ---
 
+## ⚠️ Regras de execução (agentes de IA e devs) — LEIA ANTES DE GERAR CÓDIGO
+
+Este guia descreve **ações obrigatórias**, não apenas exemplos ilustrativos. Os blocos de código com cabeçalho `// EDITAR ...` ou listados em um *Checklist de arquivos* **devem ser executados** — não são opcionais.
+
+1. **Toda etapa "EDITAR" em arquivo existente é obrigatória.** Criar as classes novas **não** conclui a tarefa: é preciso **voltar e editar** os arquivos de registro (`*Dependency.cs`, `UnitOfWorkOracle` + sua interface, `UnitOfWorkOracleContext`, `Program.cs`, `Bmg.ConsigBoilerplate.Api.csproj`). Esse é o passo mais esquecido.
+2. **Todo projeto novo exige o arquivo `.csproj`.** Criar apenas `*Dependency.cs` ou `*Facade.cs` **não** cria o projeto. É obrigatório criar `Bmg.ConsigBoilerplate.{Nome}.csproj` e adicioná-lo à solution (`dotnet sln add ...`).
+3. **A tarefa só termina quando todos os arquivos do "Checklist de arquivos" da seção correspondente** (nova entidade / nova integração) tiverem sido **criados E editados**.
+4. **Renomeie o contexto ao criar o serviço**: troque `Bmg.ConsigBoilerplate` por `Bmg.{Servico}` (nome do serviço em PascalCase) em **todos** os projetos, pastas, namespaces, assembly e classes — ver **"Renomeação do contexto"**. O token `ConsigBoilerplate` **não deve sobrar** no código final.
+5. **Validação final obrigatória**: `dotnet build` (compila — prova que registros e `ProjectReference` existem) **e** `SWAGGER_GENERATION=true dotnet build` (gera o contrato).
+
+---
+
+## Renomeação do contexto (OBRIGATÓRIO ao criar um serviço)
+
+Ao gerar um serviço a partir deste template, **renomeie o contexto** `ConsigBoilerplate` para o nome do serviço: `Bmg.ConsigBoilerplate.*` → `Bmg.{Servico}.*`. O token `ConsigBoilerplate` **não deve sobrar** no código final.
+
+**Tokens**
+- `{Servico}` — nome do serviço em **PascalCase**, sem espaços (ex.: `CreditoConsignado`). Usado em projetos, pastas, namespaces e classes: `Bmg.{Servico}.*`.
+- `{sigla}` / `{servico-fisico}` — identidade **física** da aplicação: sigla (ex.: `ccsg`) e nome em **kebab-case** (ex.: `credito-consignado`). Usados em `ApplicationPrefix` / `ApplicationName` / `<AssemblyName>` / governança (`sigla-nome-servico-api`).
+
+**O que renomear (`ConsigBoilerplate` → `{Servico}`)**
+
+| Item | De | Para |
+|---|---|---|
+| Solution | `Bmg.ConsigBoilerplate.sln` | `Bmg.{Servico}.sln` |
+| Projetos (Core) | `Bmg.ConsigBoilerplate.Domain` / `.Application` | `Bmg.{Servico}.Domain` / `.Application` |
+| Projetos (Adapters) | `Bmg.ConsigBoilerplate.Database` / `.Api` | `Bmg.{Servico}.Database` / `.Api` |
+| Integrações | `Bmg.ConsigBoilerplate.Metabusca` / `.FaceTec` | `Bmg.{Servico}.Metabusca` / `.FaceTec` |
+| Testes | `Bmg.ConsigBoilerplate.*.Test` | `Bmg.{Servico}.*.Test` |
+| Namespaces | `namespace Bmg.ConsigBoilerplate.*` | `namespace Bmg.{Servico}.*` |
+| Classes de DI | `ConsigBoilerplateApiDependency`, `...ApplicationDependency`, `...DatabaseDependency`, `ConsigBoilerplateMemoryDatabase` | `{Servico}ApiDependency`, `{Servico}...` |
+| Integração (classe/método) | `ConsigBoilerplate{Nome}Dependency` / `AddConsigBoilerplate{Nome}Module()` | `{Servico}{Nome}Dependency` / `Add{Servico}{Nome}Module()` |
+| Chaves de config | `"ConsigBoilerplate.Api:RateLimit:..."` (em `appsettings*` e `Program.cs`) | `"{Servico}.Api:RateLimit:..."` |
+| Sample CRUD¹ | `IConsigBoilerplateService` / `ConsigBoilerplateService` / `ConsigBoilerplateController` / `ConsigBoilerplateAppService` | `{Servico}*` (ou já o nome da entidade real) |
+
+¹ As classes do sample (Weather CRUD) serão substituídas pelo seu domínio real; renomeá-las junto mantém tudo compilando até a substituição.
+
+**Procedimento (script — confiável para devs e IA)**
+```bash
+SERVICO="CreditoConsignado"     # PascalCase → Bmg.CreditoConsignado.*
+SIGLA="ccsg"                    # prefixo da aplicação
+FISICO="credito-consignado"     # nome físico (kebab-case)
+
+# 1) Conteúdo dos arquivos: ConsigBoilerplate → {Servico}
+grep -rlZ --exclude-dir={.git,bin,obj} 'ConsigBoilerplate' . \
+  | xargs -0 sed -i "s/ConsigBoilerplate/${SERVICO}/g"
+
+# 2) Renomeie pastas e arquivos (profundidade primeiro)
+find . -depth -name '*ConsigBoilerplate*' -not -path './.git/*' | while read -r p; do
+  mv "$p" "$(echo "$p" | sed "s/ConsigBoilerplate/${SERVICO}/g")"
+done
+
+# 3) Identidade da aplicação (token separado do contexto)
+grep -rlZ --exclude-dir={.git,bin,obj} 'WatherForecast' . | xargs -0 sed -i "s/WatherForecast/${SERVICO}/g"
+#   Program.cs : ApplicationPrefix "wfcst" → "${SIGLA}" ; ApplicationName "weather-forecast-api" → "${FISICO}"
+#   .Api.csproj: <AssemblyName>wfcst-weather-forecast-api</AssemblyName> → "${SIGLA}-${FISICO}"
+
+# 4) Valide
+dotnet build && SWAGGER_GENERATION=true dotnet build
+```
+
+> ⚠️ `{Servico}` (contexto/namespace) e `{sigla}`/`{servico-fisico}` (identidade física) são **independentes**. Renomear só o namespace sem ajustar a identidade compila, mas publica a aplicação ainda com o nome do template. Ajuste os dois.
+
+---
+
 ## Project Structure
 
 ```text
@@ -612,7 +677,7 @@ public class Program
 
 ## Registro de dependências (DI por camada)
 
-Cada camada tem **uma classe estática de dependência** que expõe um método de extensão `Add...Module(...)`, chamado no `Program.cs`. Ao criar um novo AppService / Service / Repository, registre-o na classe correspondente.
+Cada camada tem **uma classe estática de dependência** que expõe um método de extensão `Add...Module(...)`, chamado no `Program.cs`. Ao criar um novo AppService / Service / Repository, **é obrigatório EDITAR a classe correspondente e adicionar o registro** — os blocos abaixo não são exemplos opcionais. Sem o registro, a injeção de dependência falha em runtime (`Unable to resolve service...`) mesmo com o código compilando.
 
 **API — `Adapters/Driving/Apis/.../ConsigBoilerplateApiDependency.cs`** (`AddWatherForecastApiModule`): registra os **AppServices**.
 ```csharp
@@ -654,17 +719,43 @@ public static void AddWatherForecastDatabaseModule(this IServiceCollection servi
 
 ## Integrações externas — projeto por integração
 
-Toda integração externa (Metabusca, Consig, FaceTec, PN, ...) é um **projeto e classe de implementação próprios** em `Adapters/Driven/Integrations/Apis/`, implementando um port declarado no `Domain`:
+Toda integração externa (Metabusca, Consig, FaceTec, PN, ...) é um **projeto .NET próprio** em `Adapters/Driven/Integrations/Apis/` que implementa um port declarado no `Domain`. **Criar apenas a classe `*Dependency.cs` ou `*Facade.cs` NÃO cria o projeto** — execute o checklist inteiro.
 
-- **Port (Domain)**: `Bmg.ConsigBoilerplate.Domain.Adapters.Integrations.Apis.{Bmg|Vendor}.{Nome}.v{n}` — ex.: `...Apis.Bmg.Metabusca.v1.IMetabuscaApiManager`.
-- **Projeto (Driven)**: integrações **BMG** ficam sob `Integrations/Apis/Bmg/Bmg.ConsigBoilerplate.{Nome}/`; integrações de **terceiros/parceiros** (ex.: `PN`, `Consig`) sob `Integrations/Apis/{Nome}/Bmg.ConsigBoilerplate.{Nome}/`.
-- **Classe de implementação** em `v{n}/`: `{Nome}ApiManager` (ou `{Nome}Facade`), herdando `ApiBase` e injetando **`IBmgApiClient`** (`using Bmg.Api.Client;` + `using Bmg.Api.Client.Base;`). Não use um `IApiClient` genérico — use `IBmgApiClient`.
-- **Classe de dependência**: `ConsigBoilerplate{Nome}Dependency` com `AddConsigBoilerplate{Nome}Module()` registrando o port → implementação.
-- **Referência de projeto no `.Api` (OBRIGATÓRIO)**: **todo** projeto de integração criado deve ser adicionado como `<ProjectReference>` no `Adapters/Driving/Apis/Bmg.ConsigBoilerplate.Api/Bmg.ConsigBoilerplate.Api.csproj`. Sem essa referência, o `Program.cs` **não enxerga** `AddConsigBoilerplate{Nome}Module()` e o build quebra.
-- **Registro no `Program.cs`**: `builder.Services.AddConsigBoilerplate{Nome}Module();` dentro do `if (!isSwaggerMode)`.
+**Convenções**
+- **Port (Domain)**: integrações **BMG** → `...Domain.Adapters.Integrations.Apis.Bmg.{Nome}.v{n}` (ex.: `...Apis.Bmg.Metabusca.v1.IMetabuscaApiManager`); **terceiros/parceiros** → `...Domain.Adapters.Integrations.Apis.{Nome}.v{n}` (ex.: `...Apis.FaceTec.v1.IFaceTecApiManager`, **sem** o segmento `Bmg`).
+- **Pasta do projeto**: BMG → `Integrations/Apis/Bmg/Bmg.ConsigBoilerplate.{Nome}/`; parceiros → `Integrations/Apis/{Nome}/Bmg.ConsigBoilerplate.{Nome}/`.
+- **Implementação** (`v{n}/{Nome}ApiManager.cs` ou `{Nome}Facade.cs`): herda `ApiBase`, injeta **`IBmgApiClient`** (`using Bmg.Api.Client;` + `using Bmg.Api.Client.Base;`) — nunca um `IApiClient` genérico.
 
+### Checklist de arquivos — nova integração
+
+**CRIAR**
+
+1. **`Bmg.ConsigBoilerplate.{Nome}.csproj`** (sem este arquivo NÃO existe projeto):
+```xml
+<!-- Adapters/Driven/Integrations/Apis/{Nome}/Bmg.ConsigBoilerplate.{Nome}/Bmg.ConsigBoilerplate.{Nome}.csproj -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Bmg.Api.Client" Version="10.*" />
+    <PackageReference Include="Bmg.Logging.Internal" Version="10.*" />
+  </ItemGroup>
+  <!-- A referência ao Domain (port I{Nome}ApiManager) é adicionada via CLI no passo 2 -->
+</Project>
+```
+2. **Adicionar à solution e referenciar o `Domain`** (use o CLI — ele calcula o caminho relativo correto, que varia conforme o aninhamento de pastas):
+```bash
+PROJ=Adapters/Driven/Integrations/Apis/{Nome}/Bmg.ConsigBoilerplate.{Nome}/Bmg.ConsigBoilerplate.{Nome}.csproj
+dotnet sln Bmg.ConsigBoilerplate.sln add $PROJ
+dotnet add $PROJ reference Core/Domain/Bmg.ConsigBoilerplate.Domain/Bmg.ConsigBoilerplate.Domain.csproj
+```
+3. **`v{n}/{Nome}ApiManager.cs`** (ou `{Nome}Facade.cs`) — herda `ApiBase`, injeta `IBmgApiClient` (ver seção 3b).
+4. **`I{Nome}ApiManager.cs`** no `Domain` (port), se ainda não existir.
+5. **`ConsigBoilerplate{Nome}Dependency.cs`** — classe de dependência:
 ```csharp
-// 1) Adapters/Driven/Integrations/Apis/PN/Bmg.ConsigBoilerplate.PN/ConsigBoilerplatePNDependency.cs
 public static class ConsigBoilerplatePNDependency
 {
     public static void AddConsigBoilerplatePNModule(this IServiceCollection services)
@@ -672,8 +763,10 @@ public static class ConsigBoilerplatePNDependency
 }
 ```
 
+**EDITAR (obrigatório — não pular)**
+
+6. **`Bmg.ConsigBoilerplate.Api.csproj`** — adicionar o `<ProjectReference>` do novo projeto:
 ```xml
-<!-- 2) Bmg.ConsigBoilerplate.Api.csproj — adicione TODO projeto de integração criado -->
 <ItemGroup>
   <ProjectReference Include="..\..\..\Driven\Integrations\Apis\Bmg\Bmg.ConsigBoilerplate.Metabusca\Bmg.ConsigBoilerplate.Metabusca.csproj" />
   <ProjectReference Include="..\..\..\Driven\Integrations\Apis\Bmg.ConsigBoilerplate.FaceTec\Bmg.ConsigBoilerplate.FaceTec.csproj" />
@@ -681,12 +774,14 @@ public static class ConsigBoilerplatePNDependency
   <ProjectReference Include="..\..\..\Driven\Integrations\Apis\Consig\Bmg.ConsigBoilerplate.Consig\Bmg.ConsigBoilerplate.Consig.csproj" /> <!-- novo -->
 </ItemGroup>
 ```
-
+   Ou via CLI: `dotnet add Adapters/Driving/Apis/Bmg.ConsigBoilerplate.Api/Bmg.ConsigBoilerplate.Api.csproj reference $PROJ`
+7. **`Program.cs`** — registrar o módulo dentro de `if (!isSwaggerMode)`:
 ```csharp
-// 3) Program.cs  (dentro de if (!isSwaggerMode))
 builder.Services.AddConsigBoilerplatePNModule();
 builder.Services.AddConsigBoilerplateConsigModule();
 ```
+
+> ✅ **Concluído quando** `dotnet build` compila. Se `AddConsigBoilerplate{Nome}Module()` não for encontrado → faltou o passo 6 (ProjectReference no `.Api`). Se o build não acha o projeto → faltou o passo 2 (`dotnet sln add`).
 
 ---
 
@@ -830,18 +925,48 @@ public class ContractController : BmgControllerBase<IContractAppService>
 }
 ```
 
-#### Etapa 7 — Registrar no DI + teste
-Registre em cada classe de dependência (detalhe em **"Registro de dependências (DI por camada)"**):
+#### Etapa 7 — EDITAR os arquivos de registro (DI) — OBRIGATÓRIO
+Estas são **edições em arquivos existentes**, não classes novas. **Todas são obrigatórias** — criar `ContractService`/`ContractRepository`/etc. sem fazer estas edições faz a injeção falhar (em runtime ou no build):
+
 ```csharp
-// ApplicationDependency   → services.AddScoped<IContractService, ContractService>();
-// ApiDependency           → services.AddScoped<IContractAppService, ContractAppService>();
-// DatabaseDependency      → services.AddBmgScopedRepository<IContractRepository, ContractRepository>();
-// UnitOfWorkOracle        → public IContractRepository Contracts => _provider.GetRequiredService<IContractRepository>();
-// UnitOfWorkOracleContext → public DbSet<Contract> Contracts { get; set; }   // scaffolding EF ([Obsolete])
+// EDITAR  Core/Application/.../ConsigBoilerplateApplicationDependency.cs   (AddWatherForecastApplicationModule)
+services.AddScoped<IContractService, ContractService>();
+
+// EDITAR  Adapters/Driving/Apis/.../ConsigBoilerplateApiDependency.cs      (AddWatherForecastApiModule)
+services.AddScoped<IContractAppService, ContractAppService>();
+
+// EDITAR  Adapters/Driven/.../ConsigBoilerplateDatabaseDependency.cs       (AddWatherForecastDatabaseModule)
+services.AddBmgScopedRepository<IContractRepository, ContractRepository>();
+
+// EDITAR  Adapters/Driven/.../UnitOfWork/v1/UnitOfWorkOracle.cs  (+ a interface Interfaces/v1/IUnitOfWorkOracle.cs)
+public IContractRepository Contracts => _provider.GetRequiredService<IContractRepository>();
+
+// EDITAR  Adapters/Driven/.../UnitOfWork/v1/UnitOfWorkOracleContext.cs     (scaffolding EF, [Obsolete])
+public DbSet<Contract> Contracts { get; set; }
 ```
-- **Integração externa?** Crie o projeto + `{Nome}ApiManager`/`Facade` + `AddConsigBoilerplate{Nome}Module()`, **adicione o `<ProjectReference>` do projeto no `Bmg.ConsigBoilerplate.Api.csproj`** e registre no `Program.cs` (ver **"Integrações externas — projeto por integração"**).
+
+#### Etapa 8 — Testes + validação
 - Criar `Tests/Core/Application/.../Services/v1/ContractServiceTest.cs` e `Tests/.../Api.Test/v1/ContractControllerTest.cs`.
-- Conferir o contrato: `SWAGGER_GENERATION=true dotnet build`.
+- **Integração externa?** Siga **"Checklist de arquivos — nova integração"** (inclui criar o `.csproj`, `dotnet sln add` e referenciá-lo no `.Api`).
+- Validar: `dotnet build` **e** `SWAGGER_GENERATION=true dotnet build`.
+
+### Checklist de arquivos — nova entidade (`Contract`)
+
+**CRIAR**: `Domain/Models/v1/ContractModel.cs` · `Domain/Services/v1/IContractService.cs` · `Application/Services/v1/ContractService.cs` · `Database/Repositories/Interfaces/v1/IContractRepository.cs` · `Database/Repositories/v1/ContractRepository.cs` · `Database/Entities/v1/Contract.cs` · `Api/Dtos/v1/Contract/ContractRequest.cs` + `ContractResponse.cs` · `Api/Validators/v1/Contract/ContractRequestValidator.cs` · `Api/AppServices/v1/Interfaces/IContractAppService.cs` + `Api/AppServices/v1/ContractAppService.cs` · `Api/Controllers/v1/ContractController.cs` · testes em `Tests/`.
+
+**EDITAR** (passo mais esquecido — 7 arquivos):
+
+| Arquivo | O que adicionar |
+|---|---|
+| `Application/ConsigBoilerplateApplicationDependency.cs` | `AddScoped<IContractService, ContractService>()` |
+| `Api/ConsigBoilerplateApiDependency.cs` | `AddScoped<IContractAppService, ContractAppService>()` |
+| `Database/ConsigBoilerplateDatabaseDependency.cs` | `AddBmgScopedRepository<IContractRepository, ContractRepository>()` |
+| `Database/UnitOfWork/Interfaces/v1/IUnitOfWorkOracle.cs` | `IContractRepository Contracts { get; }` |
+| `Database/UnitOfWork/v1/UnitOfWorkOracle.cs` | `public IContractRepository Contracts => _provider.GetRequiredService<IContractRepository>();` |
+| `Database/UnitOfWork/v1/UnitOfWorkOracleContext.cs` | `public DbSet<Contract> Contracts { get; set; }` |
+| `Application/Mappings/v1/ModelMappingProfile.cs` + `Api/Mappings/v1/DtoMappingProfile.cs` | `CreateMap` Model↔Entity e DTO↔Model |
+
+> ✅ **Concluído quando** `dotnet build` compila **e** os 7 arquivos de EDIÇÃO contêm as novas linhas. ⚠️ Compilar **não** garante o registro: faltar um `AddScoped`/`AddBmgScopedRepository` compila e só falha em runtime (`Unable to resolve service...`). Confira manualmente cada `*Dependency.cs`.
 
 ---
 
